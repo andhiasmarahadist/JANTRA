@@ -202,7 +202,9 @@
                         let maxW = 600, maxH = 600; let width = img.width, height = img.height;
                         if (width > height && width > maxW) { height *= maxW / width; width = maxW; }
                         else if (height > maxH) { width *= maxH / height; height = maxH; }
-                        canvas.width = width; canvas.height = height; ctx.drawImage(img, 0, 0, width, height);
+                        canvas.width = width; canvas.height = height; 
+                        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); // Otomatis mengisi layar putih untuk antisipasi file PNG
+                        ctx.drawImage(img, 0, 0, width, height);
                         let quality = 0.9; let dataUrl = canvas.toDataURL('image/jpeg', quality);
                         const compress = () => {
                             let sizeKB = Math.round((dataUrl.length * 3 / 4) / 1024);
@@ -241,19 +243,6 @@
                 } else {
                     document.getElementById('page-content').innerHTML = renderActiveMenu();
                     updateSidebarUI();
-                }
-
-                // Inisialisasi Signature Pad hanya pada saat halaman Profil dirender
-                if(state.activeMenu === 'profil') {
-                    setTimeout(() => {
-                        const canvas = document.getElementById('canvasSigProfil');
-                        if (canvas) {
-                            canvas.width = canvas.offsetWidth;
-                            window.sigPadProfil = window.initSignatureCanvas('canvasSigProfil');
-                        }
-                    }, 200);
-                } else {
-                    window.sigPadProfil = null; // Bersihkan memori jika pindah halaman
                 }
             }
         }
@@ -1092,12 +1081,14 @@
                     <div class="mt-4 border-t border-gray-100 pt-6">
                         <div class="flex justify-between items-center mb-2">
                             <label class="block text-sm font-bold text-gray-700">Tanda Tangan Anda (Untuk Cetak Laporan)</label>
-                            <button type="button" onclick="if(window.sigPadProfil) window.sigPadProfil.clear()" class="text-xs text-red-500 font-bold hover:underline">Bersihkan Kanvas</button>
                         </div>
-                        ${state.currentUser.signature ? `<div class="mb-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col md:flex-row items-center md:justify-between gap-2"><span class="text-xs font-semibold text-blue-700">Tanda tangan saat ini:</span><img src="${state.currentUser.signature}" class="h-16 object-contain mix-blend-multiply bg-white px-4 py-1 rounded border shadow-sm"></div>` : `<div class="mb-3 text-xs text-amber-600 font-semibold bg-amber-50 p-3 rounded-xl border border-amber-100">Anda belum menyimpan tanda tangan. Silakan buat di bawah ini.</div>`}
-                        <canvas id="canvasSigProfil" height="150" class="w-full bg-white border-2 border-dashed border-gray-300 rounded-xl cursor-crosshair sig-canvas shadow-sm hover:border-blue-300 transition-colors"></canvas>
+                        ${state.currentUser.signature ? `<div class="mb-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col md:flex-row items-center md:justify-between gap-2"><span class="text-xs font-semibold text-blue-700">Tanda tangan saat ini:</span><img src="${state.currentUser.signature}" class="h-16 object-contain mix-blend-multiply bg-white px-4 py-1 rounded border shadow-sm"></div>` : `<div class="mb-3 text-xs text-amber-600 font-semibold bg-amber-50 p-3 rounded-xl border border-amber-100">Anda belum menyimpan tanda tangan. Silakan unggah foto tanda tangan Anda di bawah ini.</div>`}
+                        
+                        <input type="file" accept="image/*" onchange="handleImageUpload(event, 'pSigPreview', 'pSignature')" class="w-full border border-gray-200 rounded-xl p-2 text-sm bg-gray-50 mb-2">
+                        <img id="pSigPreview" src="${state.currentUser.signature || ''}" class="h-20 object-contain mix-blend-multiply border border-gray-200 rounded p-2 bg-white shadow-sm ${state.currentUser.signature ? '' : 'hidden'}">
                         <input type="hidden" id="pSignature" value="${state.currentUser.signature || ''}">
-                        <p class="text-[10px] text-gray-400 mt-1.5"><i class="fas fa-info-circle"></i> Buat tanda tangan di dalam kotak di atas jika Anda ingin memperbarui atau menambahkannya pertama kali.</p>
+                        
+                        <p class="text-[10px] text-gray-400 mt-1.5"><i class="fas fa-info-circle"></i> Unggah foto/gambar tanda tangan Anda dari HP atau Laptop (Latar belakang putih/kertas polos sangat disarankan agar hasil cetak menyatu).</p>
                     </div>
 
                     <div class="pt-6 mt-4 border-t border-gray-100 flex justify-end">
@@ -1112,12 +1103,13 @@
             const pNama = document.getElementById('pNama').value; const pPass = document.getElementById('pPass').value; const pFoto = document.getElementById('pBase64').value;
             
             let updatedUser = { ...state.currentUser };
-            updatedUser.nama = pNama; updatedUser.foto = pFoto;
-            if(pPass && pPass.trim() !== '') updatedUser.password = pPass;
+            updatedUser.nama = pNama;
+            updatedUser.foto = pFoto;
+            if(pPass && pPass.trim() !== '') {
+                updatedUser.password = pPass;
+            }
 
-            let sigData = window.sigPadProfil ? window.sigPadProfil.getData() : '';
-            if(!sigData) sigData = document.getElementById('pSignature').value;
-            updatedUser.signature = sigData;
+            updatedUser.signature = document.getElementById('pSignature').value;
 
             showLoading();
             try {
@@ -1176,22 +1168,23 @@
 
             let isSingleTeacher = filtered.length > 0 && filtered.every(j => j.nip === filtered[0].nip);
             let teacherName = '.......................................'; let teacherNip = '.......................................'; let teacherMapel = 'Mata Pelajaran';
+            let tUserObj = null;
 
             if (r === 'Guru') {
+                tUserObj = state.currentUser;
                 teacherName = state.currentUser.nama; teacherNip = String(state.currentUser.nip || '').replace(/^'/, '').trim(); teacherMapel = state.currentUser.mapel && state.currentUser.mapel !== '-' ? state.currentUser.mapel : 'Mata Pelajaran';
             } else if (isSingleTeacher) {
+                tUserObj = state.users.find(u => String(u.nip || '').replace(/^'/, '').trim() === String(filtered[0].nip || '').replace(/^'/, '').trim());
                 teacherName = filtered[0].nama; teacherNip = String(filtered[0].nip || '').replace(/^'/, '').trim();
-                let tUser = state.users.find(u => String(u.nip || '').replace(/^'/, '').trim() === String(filtered[0].nip || '').replace(/^'/, '').trim());
-                if (tUser && tUser.mapel && tUser.mapel !== '-') teacherMapel = tUser.mapel;
+                if (tUserObj && tUserObj.mapel && tUserObj.mapel !== '-') teacherMapel = tUserObj.mapel;
             }
 
             let kepsek = state.users.find(u => u.role && u.role.trim().toLowerCase() === 'kepala sekolah');
-            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)'; let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
+            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)';
+            let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
 
-            // AUTO SIGNATURE LOGIC
-            const kepsekSigImg = `<img src="https://i.imghippo.com/files/qTh2702tc.png" style="height:90px; max-width:200px; display:block; margin: 5px 0; object-fit:contain;">`;
-            let tUserObj = state.users.find(u => String(u.nip || '').replace(/^'/, '').trim() === String(teacherNip).trim());
-            const guruSigImg = (tUserObj && tUserObj.signature) ? `<img src="${tUserObj.signature}" style="height:70px; max-width:150px; display:block; margin: 5px 0; object-fit:contain;">` : `<div style="height:70px;"></div>`;
+            const kepsekSigImg = `<div class="sig-img-container"><img src="https://i.imghippo.com/files/qTh2702tc.png" class="kepsek-sig"></div>`;
+            const guruSigImg = (tUserObj && tUserObj.signature) ? `<div class="sig-img-container"><img src="${tUserObj.signature}" class="guru-sig"></div>` : `<div class="sig-img-container"></div>`;
 
             const printWindow = window.open('', '', 'height=800,width=1000');
             printWindow.document.write(`<html><head><title>Cetak Jurnal</title>
@@ -1204,7 +1197,11 @@
                 table.main-table th, table.main-table td { border: 1px solid black; padding: 4px; }
                 table.main-table th { background-color: #d9e1f2; text-align: center; font-weight: bold; }
                 .bg-blue-light { background-color: #d9e1f2 !important; }
-                .signature-area { display:flex; justify-content:space-between; font-size:9pt; margin-top: 20px; page-break-inside: avoid; }
+                .signature-area { display:flex; justify-content:space-between; font-size:10pt; margin-top: 30px; padding: 0 40px; page-break-inside: avoid; }
+                .sig-box { text-align: center; width: 260px; }
+                .sig-img-container { position: relative; height: 90px; width: 100%; display: flex; justify-content: center; align-items: center; }
+                .kepsek-sig { position: absolute; width: 230px; max-width: none; mix-blend-mode: multiply; z-index: 10; left: 50%; transform: translateX(-55%); top: -20px; }
+                .guru-sig { position: absolute; height: 110px; max-width: none; mix-blend-mode: multiply; z-index: 10; left: 50%; transform: translateX(-50%); top: -15px; }
             </style></head><body>
             <div class="container">
                 <div style="text-align:center; margin-bottom:15px; border-bottom:2px solid black; padding-bottom:5px;">
@@ -1217,14 +1214,14 @@
                     <tbody>${trs}</tbody>
                 </table>
                 <div class="signature-area">
-                    <div style="text-align:left;">
-                        <div>Mengetahui</div>
+                    <div class="sig-box">
+                        <div>Mengetahui,</div>
                         <div>Kepala SMP Negeri 1 Dawan</div>
                         ${kepsekSigImg}
                         <div style="font-weight:bold; text-decoration:underline;">${namaKepsek}</div>
                         <div>NIP. ${nipKepsek}</div>
                     </div>
-                    <div style="text-align:left;">
+                    <div class="sig-box">
                         <div>Dawan, ${new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</div>
                         <div>Guru ${teacherMapel}</div>
                         ${guruSigImg}
@@ -1276,11 +1273,11 @@
             let mapelTextNormal = tUserObj && tUserObj.mapel && tUserObj.mapel !== '-' ? tUserObj.mapel : 'Mata Pelajaran'; let mapelText = mapelTextNormal.toUpperCase();
             
             let kepsek = state.users.find(u => u.role && u.role.trim().toLowerCase() === 'kepala sekolah');
-            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)'; let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
+            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)';
+            let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
 
-            // AUTO SIGNATURE LOGIC
-            const kepsekSigImg = `<img src="https://i.imghippo.com/files/qTh2702tc.png" style="height:90px; max-width:200px; display:block; margin: 5px 0; object-fit:contain;">`;
-            const guruSigImg = (tUserObj && tUserObj.signature) ? `<img src="${tUserObj.signature}" style="height:70px; max-width:150px; display:block; margin: 5px 0; object-fit:contain;">` : `<div style="height:70px;"></div>`;
+            const kepsekSigImg = `<div class="sig-img-container"><img src="https://i.imghippo.com/files/qTh2702tc.png" class="kepsek-sig"></div>`;
+            const guruSigImg = (tUserObj && tUserObj.signature) ? `<div class="sig-img-container"><img src="${tUserObj.signature}" class="guru-sig"></div>` : `<div class="sig-img-container"></div>`;
 
             const printWindow = window.open('', '', 'height=800,width=1000');
             printWindow.document.write(`<html><head><title>Cetak Absensi - ${fKelas}</title>
@@ -1291,7 +1288,11 @@
                 table.main-table { border-collapse: collapse; width: 100%; font-size: 8pt; text-align: center; margin-bottom: 20px; }
                 table.main-table th, table.main-table td { border: 1px solid black; padding: 4px 2px; } table.main-table th { font-weight: bold; }
                 .bg-blue { background-color: #d9e1f2 !important; } .bg-green { background-color: #e2efda !important; } .bg-yellow { background-color: #fff2cc !important; } .bg-red { background-color: #fce4d6 !important; }
-                .signature-area { display:flex; justify-content:space-between; font-size:9pt; margin-top: 30px; padding: 0 10px; page-break-inside: avoid; }
+                .signature-area { display:flex; justify-content:space-between; font-size:10pt; margin-top: 30px; padding: 0 40px; page-break-inside: avoid; }
+                .sig-box { text-align: center; width: 260px; }
+                .sig-img-container { position: relative; height: 90px; width: 100%; display: flex; justify-content: center; align-items: center; }
+                .kepsek-sig { position: absolute; width: 230px; max-width: none; mix-blend-mode: multiply; z-index: 10; left: 50%; transform: translateX(-55%); top: -20px; }
+                .guru-sig { position: absolute; height: 110px; max-width: none; mix-blend-mode: multiply; z-index: 10; left: 50%; transform: translateX(-50%); top: -15px; }
             </style></head><body><div class="container">
                 <div style="text-align:center; margin-bottom:15px; border-bottom:2px solid black; padding-bottom:5px;"><img src="https://i.imghippo.com/files/UL4915SP.png" style="width:100%; height:auto; display:block; margin:0 auto;"></div>
                 <h3 style="text-align:center; margin:0; font-size:11pt;">DAFTAR HADIR ${mapelText}</h3><h3 style="text-align:center; margin:0; margin-bottom:15px; font-size:11pt;">TAHUN PELAJARAN ${fTahun}</h3>
@@ -1299,8 +1300,20 @@
                 <table class="main-table"><thead><tr><th rowspan="2" style="width:25px;">NO</th><th rowspan="2" style="width:85px;">NIS/NISN</th><th rowspan="2">NAMA SISWA</th><th rowspan="2" style="width:25px;">L/P</th><th colspan="${uniqueDates.length||1}" class="bg-blue">BULAN / TANGGAL</th><th rowspan="2" class="bg-green" style="width:25px;">S</th><th rowspan="2" class="bg-yellow" style="width:25px;">I</th><th rowspan="2" class="bg-red" style="width:25px;">A</th></tr><tr><th class="bg-blue">${dateHeaders}</th></tr></thead>
                 <tbody>${trs}<tr><td colspan="4" style="text-align:right; padding-right:8px; font-weight:bold;">Total Kehadiran</td>${tCells}<td style="font-weight:bold;">${students.reduce((sum, s) => sum + filteredAbs.filter(x => x.nisn === s.nisn && x.status_kehadiran === 'Sakit').length, 0)}</td><td style="font-weight:bold;">${students.reduce((sum, s) => sum + filteredAbs.filter(x => x.nisn === s.nisn && x.status_kehadiran === 'Ijin').length, 0)}</td><td style="font-weight:bold;">${students.reduce((sum, s) => sum + filteredAbs.filter(x => x.nisn === s.nisn && x.status_kehadiran === 'Alpha').length, 0)}</td></tr></tbody></table>
                 <div class="signature-area">
-                    <div style="text-align:left;"><div>Mengetahui</div><div>Kepala SMP Negeri 1 Dawan</div>${kepsekSigImg}<div style="font-weight:bold; text-decoration:underline;">${namaKepsek}</div><div>NIP. ${nipKepsek}</div></div>
-                    <div style="text-align:left;"><div>Dawan, ${new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</div><div>Guru ${mapelTextNormal}</div>${guruSigImg}<div style="font-weight:bold; text-decoration:underline;">${teacherName}</div><div>NIP. ${teacherNip}</div></div>
+                    <div class="sig-box">
+                        <div>Mengetahui,</div>
+                        <div>Kepala SMP Negeri 1 Dawan</div>
+                        ${kepsekSigImg}
+                        <div style="font-weight:bold; text-decoration:underline;">${namaKepsek}</div>
+                        <div>NIP. ${nipKepsek}</div>
+                    </div>
+                    <div class="sig-box">
+                        <div>Dawan, ${new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</div>
+                        <div>Guru ${mapelTextNormal}</div>
+                        ${guruSigImg}
+                        <div style="font-weight:bold; text-decoration:underline;">${teacherName}</div>
+                        <div>NIP. ${teacherNip}</div>
+                    </div>
                 </div>
             </div><script>Promise.all(Array.from(document.images).map(img => { if (img.complete) return Promise.resolve(); return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; }); })).then(() => { setTimeout(() => window.print(), 300); });<\/script></body></html>`); printWindow.document.close();
         }
@@ -1345,11 +1358,11 @@
             let mapelTextNormal = tUserObj && tUserObj.mapel && tUserObj.mapel !== '-' ? tUserObj.mapel : 'Mata Pelajaran'; let mapelText = mapelTextNormal.toUpperCase();
             
             let kepsek = state.users.find(u => u.role && u.role.trim().toLowerCase() === 'kepala sekolah');
-            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)'; let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
+            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)';
+            let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
 
-            // AUTO SIGNATURE LOGIC
-            const kepsekSigImg = `<img src="https://i.imghippo.com/files/qTh2702tc.png" style="height:90px; max-width:200px; display:block; margin: 5px 0; object-fit:contain;">`;
-            const guruSigImg = (tUserObj && tUserObj.signature) ? `<img src="${tUserObj.signature}" style="height:70px; max-width:150px; display:block; margin: 5px 0; object-fit:contain;">` : `<div style="height:70px;"></div>`;
+            const kepsekSigImg = `<div class="sig-img-container"><img src="https://i.imghippo.com/files/qTh2702tc.png" class="kepsek-sig"></div>`;
+            const guruSigImg = (tUserObj && tUserObj.signature) ? `<div class="sig-img-container"><img src="${tUserObj.signature}" class="guru-sig"></div>` : `<div class="sig-img-container"></div>`;
 
             const printWindow = window.open('', '', 'height=800,width=1000');
             printWindow.document.write(`<html><head><title>Cetak Nilai - ${fKelas}</title>
@@ -1360,15 +1373,31 @@
                 table.main-table { border-collapse: collapse; width: 100%; font-size: 9pt; text-align: center; margin-bottom: 20px; }
                 table.main-table th, table.main-table td { border: 1px solid black; padding: 4px 2px; } table.main-table th { font-weight: bold; }
                 .bg-green { background-color: #dcedc8 !important; } .bg-blue-light { background-color: #bbdefb !important; } .bg-orange-light { background-color: #ffe0b2 !important; } .bg-yellow { background-color: #fff9c4 !important; } .bg-blue-dark { background-color: #9fa8da !important; } .bg-gray-light { background-color: #f5f5f5 !important; }
-                .signature-area { display:flex; justify-content:space-between; font-size:9pt; margin-top: 30px; padding: 0 10px; page-break-inside: avoid; }
+                .signature-area { display:flex; justify-content:space-between; font-size:10pt; margin-top: 30px; padding: 0 40px; page-break-inside: avoid; }
+                .sig-box { text-align: center; width: 260px; }
+                .sig-img-container { position: relative; height: 90px; width: 100%; display: flex; justify-content: center; align-items: center; }
+                .kepsek-sig { position: absolute; width: 230px; max-width: none; mix-blend-mode: multiply; z-index: 10; left: 50%; transform: translateX(-55%); top: -20px; }
+                .guru-sig { position: absolute; height: 110px; max-width: none; mix-blend-mode: multiply; z-index: 10; left: 50%; transform: translateX(-50%); top: -15px; }
             </style></head><body><div class="container">
                 <div style="text-align:center; margin-bottom:15px; border-bottom:2px solid black; padding-bottom:10px;"><img src="https://i.imghippo.com/files/UL4915SP.png" style="width:100%; height:auto; display:block; margin:0 auto;"></div>
                 <h3 style="text-align:center; margin:0; font-size:11pt;">DAFTAR NILAI ${mapelText}</h3><h3 style="text-align:center; margin:0; margin-bottom:15px; font-size:11pt;">TAHUN PELAJARAN ${fTahun}</h3>
                 <table style="width:100%; border:none; margin-bottom:5px; font-size:10pt; font-weight:bold;"><tr><td style="width:33%; border:none; text-align:left; padding:0;">Kelas : ${fKelas}</td><td style="width:33%; border:none; text-align:center; padding:0;">Mapel : ${mapelTextNormal}</td><td style="width:33%; border:none; text-align:right; padding:0;">Semester : ${fSem === 'Ganjil' ? '1 (Ganjil)' : '2 (Genap)'}</td></tr></table>
                 <table class="main-table"><thead><tr><th rowspan="2" style="width:30px;">NO</th><th rowspan="2" style="width:85px;">NIS/NISN</th><th rowspan="2">NAMA SISWA</th><th rowspan="2" style="width:30px;">L/P</th><th colspan="${Math.max(tpDates.length, 1) + 2}" class="bg-green">RUBRIK</th><th rowspan="2" class="bg-green" style="width:70px;">TOTAL NILAI</th></tr><tr>${tpHeaders}<th class="bg-blue-dark" style="width:60px;">UTS</th><th class="bg-gray-light" style="width:60px;">UAS</th></tr></thead><tbody>${trs}</tbody></table>
                 <div class="signature-area">
-                    <div style="text-align:left;"><div>Mengetahui</div><div>Kepala SMP Negeri 1 Dawan</div>${kepsekSigImg}<div style="font-weight:bold; text-decoration:underline;">${namaKepsek}</div><div>NIP. ${nipKepsek}</div></div>
-                    <div style="text-align:left;"><div>Dawan, ${new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</div><div>Guru ${mapelTextNormal}</div>${guruSigImg}<div style="font-weight:bold; text-decoration:underline;">${teacherName}</div><div>NIP. ${teacherNip}</div></div>
+                    <div class="sig-box">
+                        <div>Mengetahui,</div>
+                        <div>Kepala SMP Negeri 1 Dawan</div>
+                        ${kepsekSigImg}
+                        <div style="font-weight:bold; text-decoration:underline;">${namaKepsek}</div>
+                        <div>NIP. ${nipKepsek}</div>
+                    </div>
+                    <div class="sig-box">
+                        <div>Dawan, ${new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}</div>
+                        <div>Guru ${mapelTextNormal}</div>
+                        ${guruSigImg}
+                        <div style="font-weight:bold; text-decoration:underline;">${teacherName}</div>
+                        <div>NIP. ${teacherNip}</div>
+                    </div>
                 </div>
             </div><script>Promise.all(Array.from(document.images).map(img => { if (img.complete) return Promise.resolve(); return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; }); })).then(() => { setTimeout(() => window.print(), 300); });<\/script></body></html>`); printWindow.document.close();
         }
@@ -1423,12 +1452,14 @@
             let mapelTextNormal = tUserObj && tUserObj.mapel && tUserObj.mapel !== '-' ? tUserObj.mapel : 'Mata Pelajaran'; let mapelText = mapelTextNormal.toUpperCase();
 
             let kepsek = state.users.find(u => u.role && u.role.trim().toLowerCase() === 'kepala sekolah');
-            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)'; let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
+            let namaKepsek = kepsek ? kepsek.nama : '(Data Kepala Sekolah Belum Diinput)';
+            let nipKepsek = kepsek ? String(kepsek.nip || '').replace(/^'/, '').trim() : '-';
 
-            const kepsekSigImg = `<img src="https://i.imghippo.com/files/qTh2702tc.png" height="90">`;
-            const guruSigImg = (tUserObj && tUserObj.signature) ? `<img src="${tUserObj.signature}" height="70">` : ``;
+            const kepsekSigImg = `<img src="https://i.imghippo.com/files/qTh2702tc.png" height="120">`;
+            const guruSigImg = (tUserObj && tUserObj.signature) ? `<img src="${tUserObj.signature}" height="100">` : `<br><br><br><br>`;
 
-            let totalCols = Math.max(tpDates.length, 1) + 7; let colSpanTengah = Math.max(tpDates.length, 1) + 1;
+            let totalCols = Math.max(tpDates.length, 1) + 7;
+            let colSpanTengah = Math.max(tpDates.length, 1) + 1;
 
             let htmlTable = `
                 <table style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11pt;">
